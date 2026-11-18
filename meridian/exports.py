@@ -78,17 +78,27 @@ class EvidenceExporter:
         by_source = defaultdict(lambda: Counter())
         for row in bundle["evidence"]:
             by_source[row["source_id"]][row["category"]] += 1
+        report = bundle["report"]
+        participation = defaultdict(lambda: {"regions": set(), "stories": set()})
+        for story in report["stories"]:
+            for source_id in story["source_ids"]:
+                participation[source_id]["regions"].add(story["region"])
+                participation[source_id]["stories"].add((story["region"], story["story_key"],
+                                                         story["topic"], story["audience"]))
         result = []
         for source_id, counts in sorted(by_source.items()):
             source = self.sources.describe(source_id)
             result.append({"source_id": source_id, "outlet": source["outlet"],
                            "region": source["region"], "categories": dict(sorted(counts.items())),
+                           "eligible_stories": len(participation[source_id]["stories"]),
                            "observations": sum(counts.values())})
-        require(sum(row["observations"] for row in result) == bundle["report"]["observations_in_window"],
+        require(sum(row["observations"] for row in result) == report["observations_in_window"],
                 "breakdown_mismatch", "source counts do not reconcile")
-        return {"query_hash": bundle["report"]["query_hash"],
+        balance = self.analytics.source_balance(report)
+        return {"query_hash": report["query_hash"],
                 "event_head": bundle["event_head"], "sources": result,
-                "total_observations": bundle["report"]["observations_in_window"]}
+                "total_observations": report["observations_in_window"],
+                "source_balanced": balance}
 
     def story_evidence(self, query, region, story_key):
         spec = report_query(query)

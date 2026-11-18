@@ -21,7 +21,8 @@ class MeridianService:
         self.observations = ObservationLedger(self.store, self.sources)
         self.coding = CodingDesk(self.store, self.observations, self.sources)
         self.frames = CollectionFrames(self.store, self.sources, self.observations)
-        self.analytics = EvidenceAnalytics(self.store, self.observations, self.sources, self.coding)
+        self.analytics = EvidenceAnalytics(self.store, self.observations, self.sources,
+                                            self.coding, self.frames)
         self.audit = IntegrityAudit(self.store)
         self.comparisons = ComparisonEngine(self.analytics)
         self.diagnostics = ReviewDiagnostics(self.store, self.observations, self.sources,

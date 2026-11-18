@@ -95,6 +95,7 @@ class RegionComparisonInput(BaseModel):
     query: ReportInput
     left_region: str
     right_region: str
+    concentration_threshold: float = 0.75
 
 
 def create_app(path="meridian.sqlite3"):
@@ -227,7 +228,13 @@ def create_app(path="meridian.sqlite3"):
 
     @app.post("/reports/compare-regions")
     def compare_regions(payload: RegionComparisonInput):
-        return service.comparisons.regions(payload.query.model_dump(), payload.left_region, payload.right_region)
+        return service.comparisons.regions(payload.query.model_dump(), payload.left_region,
+                                           payload.right_region,
+                                           concentration_threshold=payload.concentration_threshold)
+
+    @app.post("/reports/source-balance")
+    def source_balance(payload: ReportInput):
+        return service.exports.source_breakdown(payload.model_dump())
 
     @app.post("/releases")
     def publish(payload: ReleaseInput):

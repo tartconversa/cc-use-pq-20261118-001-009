@@ -60,16 +60,48 @@ class ReleaseShelf:
                 "query_hash": row["query_hash"], "preview_token": row["preview_token"],
                 "report": decode(row["report_json"]), "created_at": row["created_at"]}
 
+    @staticmethod
+    def _composition(report):
+        regions = {}
+        for story in report["stories"]:
+            bucket = regions.setdefault(story["region"], {"stories": 0, "outlets": set(),
+                                                          "multi_source_stories": 0})
+            bucket["stories"] += 1
+            bucket["outlets"].update(story["outlets"])
+            if len(story["outlets"]) > 1:
+                bucket["multi_source_stories"] += 1
+        return {region: {"stories": bucket["stories"],
+                         "outlets": sorted(bucket["outlets"]),
+                         "multi_source_stories": bucket["multi_source_stories"]}
+                for region, bucket in sorted(regions.items())}
+
+    @staticmethod
+    def _comparable(stories):
+        # Frozen reports may predate the ``source_ids`` field; compare the
+        # original story rows as they were, and report source participation
+        # changes through ``source_composition`` instead of a false revision.
+        return [{key: value for key, value in story.items() if key != "source_ids"}
+                for story in stories]
+
     def compare(self, release_id):
         released = self.describe(release_id)
         query = released["report"]["query"]
         current = self.analytics.report(query)
         previous = released["report"]
+        old_composition = self._composition(previous)
+        new_composition = self._composition(current)
+        balance = self.analytics.source_balance(current)
         return {"release_id": release_id, "frozen_head": released["event_head"],
                 "current_head": current["event_head"],
-                "same_result": previous["stories"] == current["stories"] and
-                               previous["excluded"] == current["excluded"],
+                "same_result": self._comparable(previous["stories"]) == self._comparable(current["stories"])
+                               and previous["excluded"] == current["excluded"],
                 "story_count_delta": current["story_count"] - previous["story_count"],
                 "excluded_delta": {key: current["excluded"].get(key, 0) - previous["excluded"].get(key, 0)
-                                   for key in sorted(set(current["excluded"]) | set(previous["excluded"]))}}
+                                   for key in sorted(set(current["excluded"]) | set(previous["excluded"]))},
+                "source_composition": {
+                    "frozen": old_composition,
+                    "current": new_composition,
+                    "changed_regions": [region for region in sorted(set(old_composition) | set(new_composition))
+                                        if old_composition.get(region) != new_composition.get(region)]},
+                "source_balanced_current": balance}
 

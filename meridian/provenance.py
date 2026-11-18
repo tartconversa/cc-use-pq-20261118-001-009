@@ -14,7 +14,12 @@ class ProvenanceExplorer:
 
     @staticmethod
     def _story_index(report):
-        return {(item["region"], item["story_key"], item["topic"], item["audience"]): item
+        # ``source_ids`` was added for source-balanced views after some reports
+        # were frozen.  Ignore it when diffing so an older release does not look
+        # revised merely because its stored rows predate that field; source
+        # participation changes are reported separately by the release shelf.
+        return {(item["region"], item["story_key"], item["topic"], item["audience"]):
+                {key: value for key, value in item.items() if key != "source_ids"}
                 for item in report["stories"]}
 
     @staticmethod

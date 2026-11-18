@@ -87,6 +87,47 @@ class CollectionFrames:
             self.store.event("frame_closed", frame_id, frame["current_hash"], now)
         return self.describe(frame_id) | {"duplicate": False}
 
+    def source_state(self, source_id, start, end):
+        """Summarize how well closed frames cover one source in a query window.
+
+        A source with no frame is reported as ``unframed`` rather than treated as
+        having zero observations: absence of a collection contract is missing
+        evidence, not evidence of no coverage.
+        """
+        rows = self.store.all(
+            "SELECT frame_id FROM collection_frames WHERE source_id=? AND start_at<? AND end_at>? "
+            "ORDER BY start_at", (source_id, end, start))
+        frames = [self.describe(row["frame_id"]) for row in rows]
+        problems = []
+        if not frames:
+            state = "unframed"
+        else:
+            for frame in frames:
+                if frame["state"] != "closed":
+                    problems.append({"frame_id": frame["frame_id"], "reason": "open"})
+                elif frame["drifted"]:
+                    problems.append({"frame_id": frame["frame_id"], "reason": "drifted"})
+            reliable = [(frame["start"], frame["end"]) for frame in frames
+                        if frame["state"] == "closed" and not frame["drifted"]]
+            covered = start
+            for lower, upper in sorted(reliable):
+                if lower > covered:
+                    break
+                if upper > covered:
+                    covered = upper
+            complete = covered >= end
+            if any(item["reason"] == "open" for item in problems):
+                state = "open"
+            elif any(item["reason"] == "drifted" for item in problems):
+                state = "drifted"
+            elif not complete:
+                state = "partial"
+            else:
+                state = "complete"
+        return {"source_id": source_id, "start": start, "end": end, "state": state,
+                "complete": state == "complete", "problems": problems,
+                "frames": frames}
+
     def coverage(self, spec):
         sources = [row for row in self.sources.list() if not spec["regions"] or row["region"] in spec["regions"]]
         result = []
